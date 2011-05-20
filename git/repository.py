@@ -285,8 +285,11 @@ class LocalRepository(Repository):
             if match:
                 return commit.Commit(self, match.group(1))
         return None
-    def commit(self, message, allowEmpty=False):
-        command = "git commit -m %s" % quote_for_shell(message)
+    def commit(self, message, allowEmpty=False, commitAll=False):
+        args = ''
+        if commitAll:
+            args = args + '--all'
+        command = "git commit %s -m %s" % ( args, quote_for_shell(message) )
         if allowEmpty:
             command += " --allow-empty"
         output = self._getOutputAssertSuccess(command)
