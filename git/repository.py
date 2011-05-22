@@ -231,9 +231,24 @@ class LocalRepository(Repository):
         return [f.strip()
                 for f in self._getOutputAssertSuccess("git ls-files %s" % (" ".join(flags))).splitlines()]
     def _getRawDiff(self, *flags):
+        flags = list(flags)
+        try:
+            MatchStatus = filter(lambda x: x.startswith('MatchedStatus'), flags)[0]
+            flags.remove(MatchStatus)
+            MatchStatus = MatchStatus.split('=')[1].split(',')
+        except (ValueError, IndexError):
+            MatchStatus = ''
+
         flags = " ".join(str(f) for f in flags)
-        return [ModifiedFile(line.split()[-1]) for line in
-                self._getOutputAssertSuccess("git diff --raw %s" % flags).splitlines()]
+        modified_files = []
+        for line in self._getOutputAssertSuccess("git diff --raw %s" % flags).splitlines():
+            file_status = line.split()[-2]
+            file_name   = line.split()[-1]
+            if ( len(MatchStatus) and (file_status in MatchStatus) ) or (not len(MatchStatus)) :
+                modified_files.append(ModifiedFile(file_name))
+        
+        return modified_files
+                
     def getStagedFiles(self):
         if self.isInitialized():
             return self._getRawDiff('--cached')
@@ -242,6 +257,8 @@ class LocalRepository(Repository):
         return self._getFiles()
     def getChangedFiles(self):
         return self._getRawDiff()
+    def getDeletedFiles(self):
+        return self._getRawDiff('MatchedStatus=D')
     def getUntrackedFiles(self):
         return self._getFiles("--others")
     def isInitialized(self):
@@ -285,8 +302,11 @@ class LocalRepository(Repository):
             if match:
                 return commit.Commit(self, match.group(1))
         return None
-    def commit(self, message, allowEmpty=False):
-        command = "git commit -m %s" % quote_for_shell(message)
+    def commit(self, message, allowEmpty=False, commitAll=False):
+        args = ''
+        if commitAll:
+            args = args + '--all'
+        command = "git commit %s -m %s" % ( args, quote_for_shell(message) )
         if allowEmpty:
             command += " --allow-empty"
         output = self._getOutputAssertSuccess(command)
